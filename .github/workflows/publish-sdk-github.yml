@@ -1,0 +1,48 @@
+name: Publish SDK to GitHub Packages
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+
+env:
+  REGISTRY_URL: https://npm.pkg.github.com/
+  SCOPE: '@beeman'
+
+jobs:
+  build-and-publish-sdk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install
+      - run: pnpm lint
+      - run: pnpm test:types
+      - run: pnpm build
+      - name: Determine npm tag
+        id: npm_tag
+        run: |
+          if [[ "${GITHUB_REF##*/}" == "main" ]]; then
+            echo "TAG=latest" >> $GITHUB_ENV
+          elif [[ "${GITHUB_REF##*/}" == "dev" ]]; then
+            echo "TAG=next" >> $GITHUB_ENV
+          else
+            BRANCH_NAME=$(echo "${GITHUB_REF##*/}" | tr -c '[:alnum:]' '-')
+            echo "TAG=${BRANCH_NAME}" >> $GITHUB_ENV
+          fi
+          cat $GITHUB_ENV | grep TAG
+      - run: npm publish --tag ${{ env.TAG }}
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
